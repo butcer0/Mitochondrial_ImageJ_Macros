@@ -1,38 +1,66 @@
 firstImageTitle = displayTitles();
-unwantedParts = getUnwantedTitle(firstImageTitle);
-substringAndSave(unwantedParts);
+inputSelections = getUnwantedTitle(firstImageTitle);
+substringAndSave(inputSelections);
 
-
-function substringAndSave(unwantedParts) {
-  
-  list = getList("image.titles");
-  if (list.length==0)
-     print("No image windows are open");
-  else {
-  	 inputFolder= getDirectory("Choose a Directory");
-     for (i=0; i<list.length; i++){
-		imageName = list[i];
-		saveName = removeUnwantedText(imageName, unwantedParts);
-		print("saving: " + saveName);
-
-		selectWindow(imageName);
-		splitChannel(imageName);
-		autoContrast();
-		
-		saveAs("Tiff", inputFolder+ "/" + saveName+".tif");
-
-		selectWindow(saveName+".tif");
-		close();
-     }
- 	}
-}
-
-function splitChannel(imageName) {
+function getChannel() {
 	Dialog.create("Remove Text from Image Title");
 	Dialog.addChoice("Mitochondria Channel:", newArray(1, 2, 3));
 	Dialog.show();
 
 	channel = Dialog.getChoice();
+	return channel;
+}
+
+
+function colorize() {
+	run("Cyan Hot");
+}
+
+function substringAndSave(inputSelections) {
+	unwantedParts = newArray(3);
+	unwantedParts[0] = inputSelections[0];
+	unwantedParts[1] = inputSelections[1];
+	
+	channel = inputSelections[2];
+	doAutoAdjustContrast = inputSelections[3];
+
+	doColorize = true;
+  
+	list = getList("image.titles");
+	if (list.length==0)
+	 print("No image windows are open");
+	else {
+		 inputFolder = getDirectory("Choose a Directory");
+	 for (i=0; i<list.length; i++){
+		imageName = list[i];
+		cleanedImageName = cleanBadCharacters(imageName);
+		saveName = removeUnwantedText(cleanedImageName, unwantedParts, "");
+		print("saving: " + saveName);
+		selectWindow(imageName);
+		splitChannel(imageName, channel);
+		rename(saveName);
+
+		if(doAutoAdjustContrast) {
+			autoContrast();
+		}
+
+		if(doColorize) {
+			colorize();
+		}
+		
+		print("saving as:" + " inputFolder" + "/" + saveName+".tif");
+		saveAs("Tiff", inputFolder+ "/" + saveName+".tif");
+		selectWindow(saveName+".tif");
+		close();
+	 }
+	}
+}
+
+function splitChannel(imageName, channel) {
+	if(!is("composite")) {
+		return;
+	}
+	
 	run("Split Channels");
 
 	if(channel == 1) {
@@ -53,16 +81,26 @@ function splitChannel(imageName) {
 	return imageName;
 }
 
-function removeUnwantedText(originalText, unwantedParts) {
+function removeUnwantedText(originalText, unwantedParts, newCharacter) {
 	resultText = originalText;
 	for (i=0; i<unwantedParts.length; i++){
 		len1=lengthOf(resultText);
 		len2=lengthOf(unwantedParts[i]);
 		len3=indexOf(resultText,unwantedParts[i]);
-		string1=substring(resultText, len2+len3,len1);
-		string2=substring(resultText, 0,len3);
-		resultText=string2+string1;
+		if(len3 > -1) {
+			string1=substring(resultText, len2+len3,len1);
+			string2=substring(resultText, 0,len3);
+			resultText=string2+string1;
+		}		
 	}
+	return resultText;
+}
+
+function cleanBadCharacters(originalText) {
+	unwantedParts = newArray(2);
+	unwantedParts[0] = "/";
+	unwantedParts[1] = " ";
+	resultText = removeUnwantedText(originalText, unwantedParts, "_");
 	return resultText;
 }
 
@@ -73,22 +111,29 @@ function getUnwantedTitle(defaultText) {
 	Dialog.create("Remove Text from Image Title");
 	Dialog.addString("Prefix:", unwantedPrefix);
 	Dialog.addString("Suffix:", unwantedSuffix);
+	Dialog.addChoice("Mitochondria Channel:", newArray(1, 2, 3));
+	Dialog.addCheckbox("Auto Adjust Contrast", false);
 	Dialog.show();
 	unwantedPrefix = Dialog.getString();
 	unwantedSuffix = Dialog.getString();
+	channel = Dialog.getChoice();
+	doAutoAdjustContrast = Dialog.getCheckbox();
 	print("Removing "+unwantedPrefix + "..." + unwantedSuffix+ " from Titles");
 
-	unwantedParts = newArray(2);
-	unwantedParts[0] = unwantedPrefix;
-	unwantedParts[1] = unwantedSuffix;
-
+	inputSelections = newArray(4);
+	inputSelections[0] = unwantedPrefix;
+	inputSelections[1] = unwantedSuffix;
+	inputSelections[2] = channel;
+	inputSelections[3] = doAutoAdjustContrast;
+	
+	
 	Dialog.create("Title Preview");
-	previewTitle = removeUnwantedText(defaultText, unwantedParts);
+	previewTitle = removeUnwantedText(defaultText, inputSelections, "");
 	Dialog.addMessage(previewTitle);
 	Dialog.addMessage("Press OK to continue...");
 	Dialog.show();
 	
-	return unwantedParts;
+	return inputSelections;
 }
 
 function displayTitles() {
